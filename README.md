@@ -195,7 +195,7 @@ import 'package:flutter_secure_recaptcha/flutter_secure_recaptcha.dart';
 FlutterSecureRecaptcha(
   siteKey: 'YOUR_SITE_KEY',
   // For mobile, this should be your hosted domain for assets; for web, it is your Firebase or custom hosting domain
-  domain: 'YOUR_HOSTED_DOMAIN',
+  recaptchaHostDomain: 'YOUR_HOSTED_DOMAIN',
   onVerifiedSuccessfully: (String token) {
     // Handle the successful token verification
   },
