@@ -179,9 +179,6 @@ FlutterSecureRecaptcha(
   onVerifiedSuccessfully: (String token) {
     // Handle the successful token verification
   },
-  onFailed: () {
-    // Handle failed verification
-  },
 );
 ```
 
