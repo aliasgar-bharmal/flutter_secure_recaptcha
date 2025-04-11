@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>reCAPTCHA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://www.google.com/recaptcha/api.js?onload=onLoadCallback&render=explicit" async defer></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="recaptcha-container"></div>
+
+    <script>
+        function onLoadCallback() {
+            const sitekey = new URLSearchParams(location.search).get("sitekey");
+            if (!sitekey) return;
+
+            grecaptcha.render("recaptcha-container", {
+                sitekey,
+                callback: (token) => {
+                    if (window.Recaptcha && typeof Recaptcha.postMessage === "function") {
+                        console.log("Sending token via Recaptcha JS channel");
+                        Recaptcha.postMessage("recaptchaToken:" + token);
+                    } else {
+                        console.warn("Recaptcha JS channel not found; fallback to parent.postMessage");
+                        window.parent.postMessage({ type: "recaptcha-token", recaptchaToken: token }, "*");
+                    }
+                },
+            });
+        }
+    </script>
+</body>
+
+</html>

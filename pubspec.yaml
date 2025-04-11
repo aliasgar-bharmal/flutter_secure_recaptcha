@@ -1,0 +1,23 @@
+name: flutter_secure_recaptcha
+description: Secure, cross-platform reCAPTCHA integration for Flutter (Web & Mobile) with minimal setup.
+version: 0.0.1
+homepage: https://github.com/aliasgar-bharmal/flutter_secure_recaptcha
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  args: ^2.4.2
+  build: ^2.4.1
+  path: ^1.9.0
+  webview_flutter: ^4.4.2
+  plugin_platform_interface: ^2.1.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
