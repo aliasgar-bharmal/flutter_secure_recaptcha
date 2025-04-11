@@ -22,6 +22,26 @@ flutter pub get
 
 ---
 
+### 📄 Create reCAPTCHA Keys
+
+Go to the Google reCAPTCHA Admin Console.
+
+Click + Create to register a new site.
+
+Fill the form:
+
+Label: Any name.
+
+reCAPTCHA type: v2 ("I'm not a robot") or v3 depending on your needs.
+
+Domains: Add Firebase hosting domain or custom domain (e.g., your-app.web.app, yourdomain.com).
+
+Accept Terms and click Submit.
+
+Copy the site key and keep it for plugin usage.
+
+---
+
 ## 📱 For Mobile (Android & iOS)
 
 ### 1. Generate Required Files
