@@ -9,6 +9,7 @@ State<RecaptchaWidget> createRecaptchaState() => _RecaptchaMobileState();
 
 class _RecaptchaMobileState extends State<RecaptchaWidget> {
   late final WebViewController _webViewController;
+  double _webViewHeight = 1; // Start small, update once recaptcha loads
 
   @override
   void initState() {
@@ -37,6 +38,11 @@ class _RecaptchaMobileState extends State<RecaptchaWidget> {
     if (msg.startsWith('recaptchaToken:')) {
       final token = msg.replaceFirst('recaptchaToken:', '');
       widget.onVerified(token);
+    } else if (msg.startsWith('contentHeight:')) {
+      final newHeight = double.tryParse(msg.replaceFirst('contentHeight:', ''));
+      if (newHeight != null && newHeight != _webViewHeight) {
+        setState(() => _webViewHeight = newHeight);
+      }
     }
   }
 
@@ -60,6 +66,13 @@ class _RecaptchaMobileState extends State<RecaptchaWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return WebViewWidget(controller: _webViewController);
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: SizedBox(
+        height: _webViewHeight,
+        child: WebViewWidget(controller: _webViewController),
+      ),
+    );
   }
 }

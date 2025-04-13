@@ -39,6 +39,24 @@
                 },
             });
         }
+        function sendHeight() {
+            const body = document.body;
+            const html = document.documentElement;
+            const height = Math.max(
+                body.scrollHeight,
+                body.offsetHeight,
+                html.clientHeight,
+                html.scrollHeight,
+                html.offsetHeight
+            );
+            Recaptcha.postMessage('contentHeight:' + height);
+        }
+
+        window.addEventListener('load', sendHeight);
+        window.addEventListener('resize', sendHeight);
+
+        // If reCAPTCHA is rendered dynamically (e.g., via `grecaptcha.render`)
+        setTimeout(sendHeight, 500); // fine-tune if needed
     </script>
 </body>
 

@@ -1,6 +1,7 @@
 import 'dart:html' as html;
 import 'dart:developer';
 import 'dart:ui_web' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_recaptcha/src/core/recaptcha_controller.dart';
 
@@ -9,6 +10,7 @@ State<RecaptchaWidget> createRecaptchaState() => _RecaptchaWebIframeState();
 class _RecaptchaWebIframeState extends State<RecaptchaWidget> {
   late final String _viewId;
   bool _viewReady = false;
+  double _iframeHeight = 150;
 
   @override
   void initState() {
@@ -19,10 +21,11 @@ class _RecaptchaWebIframeState extends State<RecaptchaWidget> {
 
   Future<void> _initIframe() async {
     try {
-      final host = widget.hostDomain.trim();
-      final safeHost = (host.isEmpty) ? 'localhost' : host;
+      final host = widget.hostDomain.trim().isEmpty
+          ? 'localhost'
+          : widget.hostDomain.trim();
 
-      final recaptchaUrl = Uri.https(safeHost, '/recaptcha.html', {
+      final recaptchaUrl = Uri.https(host, '/recaptcha.html', {
         'sitekey': widget.siteKey,
       });
 
@@ -31,8 +34,8 @@ class _RecaptchaWebIframeState extends State<RecaptchaWidget> {
       final iframe = html.IFrameElement()
         ..src = recaptchaUrl.toString()
         ..style.border = 'none'
-        ..width = '100%'
-        ..height = '150'
+        ..style.width = '100%'
+        ..style.height = '${_iframeHeight}px'
         ..allow = 'encrypted-media';
 
       html.window.onMessage.listen(_handleMessageFromIframe);
@@ -51,21 +54,35 @@ class _RecaptchaWebIframeState extends State<RecaptchaWidget> {
   void _handleMessageFromIframe(html.MessageEvent event) {
     final data = event.data;
 
-    if (data is Map &&
-        data['type'] == 'recaptcha-token' &&
-        data['recaptchaToken'] is String) {
-      final token = data['recaptchaToken'] as String;
-      log('[reCAPTCHA] Token received from iframe: $token');
-      widget.onVerified(token);
-    } else {
-      log('[reCAPTCHA] Unhandled message from iframe: $data');
+    if (data is Map) {
+      if (data['type'] == 'recaptcha-token' &&
+          data['recaptchaToken'] is String) {
+        final token = data['recaptchaToken'] as String;
+        log('[reCAPTCHA] Token received from iframe: $token');
+        widget.onVerified(token);
+      } else if (data['type'] == 'content-height' && data['height'] is num) {
+        final newHeight = (data['height'] as num).toDouble();
+        if (newHeight != _iframeHeight && newHeight > 0) {
+          setState(() => _iframeHeight = newHeight);
+        }
+      } else {
+        log('[reCAPTCHA] Unhandled iframe message: $data');
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return _viewReady
-        ? HtmlElementView(viewType: _viewId)
-        : const SizedBox.shrink();
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      child: _viewReady
+          ? SizedBox(
+              width: double.infinity,
+              height: _iframeHeight,
+              child: HtmlElementView(viewType: _viewId),
+            )
+          : const SizedBox.shrink(),
+    );
   }
 }
