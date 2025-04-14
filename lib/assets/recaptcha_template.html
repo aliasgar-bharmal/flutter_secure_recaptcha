@@ -7,56 +7,339 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://www.google.com/recaptcha/api.js?onload=onLoadCallback&render=explicit" async defer></script>
     <style>
+        /* Reset and base styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: transparent;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f4f4f4;
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        /* Container styles */
+        .recaptcha-container {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            border-radius: 8px;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Dialog mode styles */
+        .dialog-mode .recaptcha-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+
+        /* Overlay for dialog mode */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            display: none;
+        }
+
+        .dialog-mode .overlay {
+            display: block;
+        }
+
+        /* Loading indicator */
+        .loading-indicator {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #3498db;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Error message */
+        .error-message {
+            color: #e74c3c;
+            text-align: center;
+            padding: 8px;
+            margin-top: 8px;
+            border-radius: 4px;
+            background-color: #fdecea;
+            width: 100%;
+            display: none;
+        }
+
+        /* Close button */
+        .close-button {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+        }
+
+        .close-button:hover {
+            color: #34495e;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .recaptcha-container {
+                padding: 12px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div id="recaptcha-container"></div>
+    <div class="overlay"></div>
+
+    <div class="recaptcha-container">
+        <div id="recaptcha-element"></div>
+        <div id="error-message" class="error-message"></div>
+        <div id="loading-indicator" class="loading-indicator">
+            <div class="spinner"></div>
+        </div>
+    </div>
 
     <script>
-        function onLoadCallback() {
-            const sitekey = new URLSearchParams(location.search).get("sitekey");
-            if (!sitekey) return;
+        // Global variables
+        let recaptchaWidget = null;
+        let isDialogMode = false;
 
-            grecaptcha.render("recaptcha-container", {
-                sitekey,
-                callback: (token) => {
-                    if (window.Recaptcha && typeof Recaptcha.postMessage === "function") {
-                        console.log("Sending token via Recaptcha JS channel");
-                        Recaptcha.postMessage("recaptchaToken:" + token);
-                    } else {
-                        console.warn("Recaptcha JS channel not found; fallback to parent.postMessage");
-                        window.parent.postMessage({ type: "recaptcha-token", recaptchaToken: token }, "*");
-                    }
-                },
+        // Parse URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const sitekey = urlParams.get('sitekey');
+        const theme = urlParams.get('theme') || 'light';
+        const size = urlParams.get('size') || 'normal';
+
+        // Initialize reCAPTCHA when Google API is loaded
+        window.onLoadCallback = function () {
+            try {
+                if (!sitekey) {
+                    showError('Site key is missing');
+                    return;
+                }
+
+                // Hide loading indicator when reCAPTCHA is ready
+                hideLoading();
+
+                // Render reCAPTCHA
+                recaptchaWidget = grecaptcha.render('recaptcha-element', {
+                    'sitekey': sitekey,
+                    'theme': theme,
+                    'size': size,
+                    'callback': handleRecaptchaToken,
+                    'error-callback': handleRecaptchaError,
+                    'expired-callback': handleRecaptchaExpired
+                });
+
+                // Notify parent that reCAPTCHA is loaded
+                notifyParent({
+                    type: 'recaptcha-loaded'
+                });
+
+                // Update height after rendering
+                updateHeight();
+
+            } catch (error) {
+                showError('Failed to initialize reCAPTCHA: ' + error.message);
+            }
+        };
+
+        // Handle successful verification
+        function handleRecaptchaToken(token) {
+            hideError();
+
+            // Send token to parent
+            notifyParent({
+                type: 'recaptcha-token',
+                recaptchaToken: token
             });
         }
-        function sendHeight() {
-            const body = document.body;
-            const html = document.documentElement;
-            const height = Math.max(
-                body.scrollHeight,
-                body.offsetHeight,
-                html.clientHeight,
-                html.scrollHeight,
-                html.offsetHeight
-            );
-            Recaptcha.postMessage('contentHeight:' + height);
+
+        // Handle reCAPTCHA errors
+        function handleRecaptchaError() {
+            showError('reCAPTCHA verification failed');
         }
 
-        window.addEventListener('load', sendHeight);
-        window.addEventListener('resize', sendHeight);
+        // Handle reCAPTCHA expiration
+        function handleRecaptchaExpired() {
+            showError('reCAPTCHA verification expired');
 
-        // If reCAPTCHA is rendered dynamically (e.g., via `grecaptcha.render`)
-        setTimeout(sendHeight, 500); // fine-tune if needed
+            try {
+                grecaptcha.reset(recaptchaWidget);
+            } catch (error) {
+                console.error('Failed to reset expired reCAPTCHA:', error);
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+
+            console.error(message);
+
+            // Notify parent of error
+            notifyParent({
+                type: 'recaptcha-error',
+                error: message
+            });
+
+            // Update height after showing error
+            updateHeight();
+        }
+
+        // Hide error message
+        function hideError() {
+            const errorElement = document.getElementById('error-message');
+            errorElement.style.display = 'none';
+
+            // Update height after hiding error
+            updateHeight();
+        }
+
+        // Show loading indicator
+        function showLoading() {
+            document.getElementById('loading-indicator').style.display = 'flex';
+            updateHeight();
+        }
+
+        // Hide loading indicator
+        function hideLoading() {
+            document.getElementById('loading-indicator').style.display = 'none';
+            updateHeight();
+        }
+
+        // Update container height and notify parent
+        function updateHeight() {
+            try {
+                const container = document.querySelector('.recaptcha-container');
+                const height = container.offsetHeight;
+
+                // Notify parent of height change
+                notifyParent({
+                    type: 'content-height',
+                    height: Math.max(height, 150)
+                });
+            } catch (error) {
+                console.error('Height update failed:', error);
+            }
+        }
+
+        // Send message to parent frame
+        function notifyParent(data) {
+            try {
+                window.parent.postMessage(data, '*');
+            } catch (error) {
+                console.error('Failed to notify parent:', error);
+            }
+        }
+
+        // Toggle dialog mode
+        function setDialogMode(enabled) {
+            isDialogMode = enabled;
+            document.body.classList.toggle('dialog-mode', enabled);
+            updateHeight();
+        }
+
+        // Reset reCAPTCHA
+        function resetCaptcha() {
+            try {
+                grecaptcha.reset(recaptchaWidget);
+                hideError();
+                updateHeight();
+            } catch (error) {
+                showError('Failed to reset reCAPTCHA: ' + error.message);
+            }
+        }
+
+        // Handle messages from parent frame
+        window.addEventListener('message', function (event) {
+            try {
+                const data = event.data;
+
+                if (typeof data === 'object' && data !== null) {
+                    switch (data.type) {
+                        case 'reset-captcha':
+                            resetCaptcha();
+                            break;
+
+                        case 'set-dialog-mode':
+                            setDialogMode(data.enabled);
+                            break;
+
+                        case 'show-loading':
+                            showLoading();
+                            break;
+
+                        case 'hide-loading':
+                            hideLoading();
+                            break;
+                    }
+                }
+            } catch (error) {
+                console.error('Error handling message from parent:', error);
+            }
+        });
+
+        // Add event listeners for height updates
+        window.addEventListener('load', updateHeight);
+        window.addEventListener('resize', updateHeight);
+
+        // Create MutationObserver to watch for DOM changes
+        const observer = new MutationObserver(updateHeight);
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true
+        });
+
+        // Initial setup
+        document.addEventListener('DOMContentLoaded', function () {
+            // Check if we should start in dialog mode
+            const dialogMode = urlParams.get('dialog') === 'true';
+            if (dialogMode) {
+                setDialogMode(true);
+            }
+
+            // Show loading initially
+            showLoading();
+        });
     </script>
 </body>
 
