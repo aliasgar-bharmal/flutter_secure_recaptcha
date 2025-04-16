@@ -2,18 +2,27 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>reCAPTCHA</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://www.google.com/recaptcha/api.js?onload=onLoadCallback&render=explicit" async defer></script>
     <style>
+        html,
         body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: transparent;
+        }
+
+        #recaptcha-container {
+            width: 100%;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f4f4f4;
+            align-items: flex-start;
+            padding-top: 10px;
         }
     </style>
 </head>
@@ -22,41 +31,101 @@
     <div id="recaptcha-container"></div>
 
     <script>
+        let currentHeight = 78;
+        let challengeVisible = false;
+
         function onLoadCallback() {
             const sitekey = new URLSearchParams(location.search).get("sitekey");
             if (!sitekey) return;
 
             grecaptcha.render("recaptcha-container", {
-                sitekey,
+                sitekey: sitekey,
                 callback: (token) => {
-                    if (window.Recaptcha && typeof Recaptcha.postMessage === "function") {
-                        console.log("Sending token via Recaptcha JS channel");
-                        Recaptcha.postMessage("recaptchaToken:" + token);
-                    } else {
-                        console.warn("Recaptcha JS channel not found; fallback to parent.postMessage");
-                        window.parent.postMessage({ type: "recaptcha-token", recaptchaToken: token }, "*");
-                    }
+                    sendMessage('recaptcha-token', { recaptchaToken: token });
                 },
+                'expired-callback': () => {
+                    sendMessage('recaptcha-expired');
+                },
+                'error-callback': () => {
+                    sendMessage('recaptcha-error', { error: 'reCAPTCHA error occurred' });
+                }
             });
-        }
-        function sendHeight() {
-            const body = document.body;
-            const html = document.documentElement;
-            const height = Math.max(
-                body.scrollHeight,
-                body.offsetHeight,
-                html.clientHeight,
-                html.scrollHeight,
-                html.offsetHeight
-            );
-            Recaptcha.postMessage('contentHeight:' + height);
+
+            // Set up observers
+            setupHeightObserver();
         }
 
-        window.addEventListener('load', sendHeight);
-        window.addEventListener('resize', sendHeight);
+        function sendMessage(type, data) {
+            const message = JSON.stringify({ type, ...data });
+            if (window.RecaptchaFlutter) {
+                window.RecaptchaFlutter.postMessage(message);
+            } else {
+                window.parent.postMessage(message, '*');
+            }
+        }
 
-        // If reCAPTCHA is rendered dynamically (e.g., via `grecaptcha.render`)
-        setTimeout(sendHeight, 500); // fine-tune if needed
+        function updateHeight() {
+            try {
+                const bframeIframe = document.querySelector('iframe[src*="recaptcha/api2/bframe"]');
+                const DEFAULT_HEIGHT = 100;
+                let newHeight = DEFAULT_HEIGHT;
+
+                if (bframeIframe) {
+                    const container = bframeIframe.closest('div[style*="position: fixed"]');
+                    const outerContainer = container?.parentElement;
+
+                    if (outerContainer) {
+                        const opacity = window.getComputedStyle(outerContainer).opacity;
+                        const containerHeight = bframeIframe.offsetHeight;
+                        newHeight = opacity === "1" ? containerHeight : DEFAULT_HEIGHT;
+                    }
+                }
+
+                if (newHeight !== currentHeight) {
+                    currentHeight = newHeight;
+                    sendMessage('height-update', { height: newHeight });
+                    console.log('Height updated:', newHeight);
+                }
+            } catch (error) {
+                console.error('Error updating height:', error);
+            }
+        }
+        function setupHeightObserver() {
+            const mutationConfig = {
+                attributes: true,
+                childList: true,
+                subtree: true,
+                attributeFilter: ['style', 'class']
+            };
+
+            const mutationObserver = new MutationObserver(debouncedUpdateHeight);
+            const resizeObserver = new ResizeObserver(debouncedUpdateHeight);
+
+            // Start observers
+            mutationObserver.observe(document.body, mutationConfig);
+
+            const recaptchaContainer = document.getElementById('recaptcha-container');
+            if (recaptchaContainer) {
+                resizeObserver.observe(recaptchaContainer);
+            }
+
+            // Initial height update
+            updateHeight();
+        }
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        const debouncedUpdateHeight = debounce(updateHeight, 250);
+
     </script>
 </body>
 
