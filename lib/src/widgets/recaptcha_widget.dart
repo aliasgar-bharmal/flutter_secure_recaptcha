@@ -43,7 +43,6 @@ class _RecaptchaWidgetState extends State<RecaptchaWidget> {
   late final RecaptchaController _controller;
   late final dynamic _platformImplementation;
   double _currentHeight = 0;
-  bool _challengeVisible = false;
 
   @override
   void initState() {
@@ -67,7 +66,6 @@ class _RecaptchaWidgetState extends State<RecaptchaWidget> {
       hostDomain: widget.hostDomain,
       onVerified: (token) {
         // Reset height after verification
-        _setChallengeVisible(false);
         widget.onVerified(token);
       },
       onError: (error) {
@@ -78,7 +76,6 @@ class _RecaptchaWidgetState extends State<RecaptchaWidget> {
       controller: _controller,
       initialHeight: widget.initialHeight,
       maxHeight: widget.maxHeight,
-      onChallengeVisible: _setChallengeVisible,
     );
   }
 
@@ -86,15 +83,6 @@ class _RecaptchaWidgetState extends State<RecaptchaWidget> {
     // Update state based on controller changes
     if (mounted) {
       setState(() {});
-    }
-  }
-
-  void _setChallengeVisible(bool visible) {
-    if (_challengeVisible != visible) {
-      setState(() {
-        _challengeVisible = visible;
-        _currentHeight = visible ? widget.maxHeight : widget.initialHeight;
-      });
     }
   }
 
@@ -111,13 +99,7 @@ class _RecaptchaWidgetState extends State<RecaptchaWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      height: _currentHeight,
-      width: widget.width ?? double.infinity,
-      child: _platformImplementation.build(context),
-    );
+    return _platformImplementation.build(context);
   }
 }
 

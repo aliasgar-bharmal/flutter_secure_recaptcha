@@ -14,7 +14,6 @@ RecaptchaPlatform getPlatformImplementation({
   required double initialHeight,
   required double maxHeight,
   required double? width,
-  required Function(bool) onChallengeVisible,
 }) {
   throw UnsupportedError(
     'No implementation found for getPlatformImplementation',

@@ -2,344 +2,130 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>reCAPTCHA</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://www.google.com/recaptcha/api.js?onload=onLoadCallback&render=explicit" async defer></script>
     <style>
-        /* Reset and base styles */
-        * {
-            box-sizing: border-box;
+        html,
+        body {
             margin: 0;
             padding: 0;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            background-color: transparent;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 16px;
-        }
-
-        /* Container styles */
-        .recaptcha-container {
-            width: 100%;
-            max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-            border-radius: 8px;
-            background-color: white;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Dialog mode styles */
-        .dialog-mode .recaptcha-container {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 1000;
-        }
-
-        /* Overlay for dialog mode */
-        .overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 999;
-            display: none;
+            overflow: hidden;
+            background-color: transparent;
         }
 
-        .dialog-mode .overlay {
-            display: block;
-        }
-
-        /* Loading indicator */
-        .loading-indicator {
+        #recaptcha-container {
+            width: 100%;
             display: flex;
             justify-content: center;
-            align-items: center;
-            padding: 16px;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            border-radius: 50%;
-            border-top-color: #3498db;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* Error message */
-        .error-message {
-            color: #e74c3c;
-            text-align: center;
-            padding: 8px;
-            margin-top: 8px;
-            border-radius: 4px;
-            background-color: #fdecea;
-            width: 100%;
-            display: none;
-        }
-
-        /* Close button */
-        .close-button {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: #7f8c8d;
-        }
-
-        .close-button:hover {
-            color: #34495e;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 480px) {
-            .recaptcha-container {
-                padding: 12px;
-            }
+            align-items: flex-start;
+            padding-top: 10px;
         }
     </style>
 </head>
 
 <body>
-    <div class="overlay"></div>
-
-    <div class="recaptcha-container">
-        <div id="recaptcha-element"></div>
-        <div id="error-message" class="error-message"></div>
-        <div id="loading-indicator" class="loading-indicator">
-            <div class="spinner"></div>
-        </div>
-    </div>
+    <div id="recaptcha-container"></div>
 
     <script>
-        // Global variables
-        let recaptchaWidget = null;
-        let isDialogMode = false;
+        let currentHeight = 78;
+        let challengeVisible = false;
 
-        // Parse URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const sitekey = urlParams.get('sitekey');
-        const theme = urlParams.get('theme') || 'light';
-        const size = urlParams.get('size') || 'normal';
+        function onLoadCallback() {
+            const sitekey = new URLSearchParams(location.search).get("sitekey");
+            if (!sitekey) return;
 
-        // Initialize reCAPTCHA when Google API is loaded
-        window.onLoadCallback = function () {
-            try {
-                if (!sitekey) {
-                    showError('Site key is missing');
-                    return;
+            grecaptcha.render("recaptcha-container", {
+                sitekey: sitekey,
+                callback: (token) => {
+                    sendMessage('recaptcha-token', { recaptchaToken: token });
+                },
+                'expired-callback': () => {
+                    sendMessage('recaptcha-expired');
+                },
+                'error-callback': () => {
+                    sendMessage('recaptcha-error', { error: 'reCAPTCHA error occurred' });
                 }
-
-                // Hide loading indicator when reCAPTCHA is ready
-                hideLoading();
-
-                // Render reCAPTCHA
-                recaptchaWidget = grecaptcha.render('recaptcha-element', {
-                    'sitekey': sitekey,
-                    'theme': theme,
-                    'size': size,
-                    'callback': handleRecaptchaToken,
-                    'error-callback': handleRecaptchaError,
-                    'expired-callback': handleRecaptchaExpired
-                });
-
-                // Notify parent that reCAPTCHA is loaded
-                notifyParent({
-                    type: 'recaptcha-loaded'
-                });
-
-                // Update height after rendering
-                updateHeight();
-
-            } catch (error) {
-                showError('Failed to initialize reCAPTCHA: ' + error.message);
-            }
-        };
-
-        // Handle successful verification
-        function handleRecaptchaToken(token) {
-            hideError();
-
-            // Send token to parent
-            notifyParent({
-                type: 'recaptcha-token',
-                recaptchaToken: token
             });
+
+            // Set up observers
+            setupHeightObserver();
         }
 
-        // Handle reCAPTCHA errors
-        function handleRecaptchaError() {
-            showError('reCAPTCHA verification failed');
-        }
-
-        // Handle reCAPTCHA expiration
-        function handleRecaptchaExpired() {
-            showError('reCAPTCHA verification expired');
-
-            try {
-                grecaptcha.reset(recaptchaWidget);
-            } catch (error) {
-                console.error('Failed to reset expired reCAPTCHA:', error);
+        function sendMessage(type, data) {
+            const message = JSON.stringify({ type, ...data });
+            if (window.RecaptchaFlutter) {
+                window.RecaptchaFlutter.postMessage(message);
+            } else {
+                window.parent.postMessage(message, '*');
             }
         }
 
-        // Show error message
-        function showError(message) {
-            const errorElement = document.getElementById('error-message');
-            errorElement.textContent = message;
-            errorElement.style.display = 'block';
-
-            console.error(message);
-
-            // Notify parent of error
-            notifyParent({
-                type: 'recaptcha-error',
-                error: message
-            });
-
-            // Update height after showing error
-            updateHeight();
-        }
-
-        // Hide error message
-        function hideError() {
-            const errorElement = document.getElementById('error-message');
-            errorElement.style.display = 'none';
-
-            // Update height after hiding error
-            updateHeight();
-        }
-
-        // Show loading indicator
-        function showLoading() {
-            document.getElementById('loading-indicator').style.display = 'flex';
-            updateHeight();
-        }
-
-        // Hide loading indicator
-        function hideLoading() {
-            document.getElementById('loading-indicator').style.display = 'none';
-            updateHeight();
-        }
-
-        // Update container height and notify parent
         function updateHeight() {
             try {
-                const container = document.querySelector('.recaptcha-container');
-                const height = container.offsetHeight;
+                const bframeIframe = document.querySelector('iframe[src*="recaptcha/api2/bframe"]');
+                const DEFAULT_HEIGHT = 100;
+                let newHeight = DEFAULT_HEIGHT;
 
-                // Notify parent of height change
-                notifyParent({
-                    type: 'content-height',
-                    height: Math.max(height, 150)
-                });
-            } catch (error) {
-                console.error('Height update failed:', error);
-            }
-        }
+                if (bframeIframe) {
+                    const container = bframeIframe.closest('div[style*="position: fixed"]');
+                    const outerContainer = container?.parentElement;
 
-        // Send message to parent frame
-        function notifyParent(data) {
-            try {
-                window.parent.postMessage(data, '*');
-            } catch (error) {
-                console.error('Failed to notify parent:', error);
-            }
-        }
-
-        // Toggle dialog mode
-        function setDialogMode(enabled) {
-            isDialogMode = enabled;
-            document.body.classList.toggle('dialog-mode', enabled);
-            updateHeight();
-        }
-
-        // Reset reCAPTCHA
-        function resetCaptcha() {
-            try {
-                grecaptcha.reset(recaptchaWidget);
-                hideError();
-                updateHeight();
-            } catch (error) {
-                showError('Failed to reset reCAPTCHA: ' + error.message);
-            }
-        }
-
-        // Handle messages from parent frame
-        window.addEventListener('message', function (event) {
-            try {
-                const data = event.data;
-
-                if (typeof data === 'object' && data !== null) {
-                    switch (data.type) {
-                        case 'reset-captcha':
-                            resetCaptcha();
-                            break;
-
-                        case 'set-dialog-mode':
-                            setDialogMode(data.enabled);
-                            break;
-
-                        case 'show-loading':
-                            showLoading();
-                            break;
-
-                        case 'hide-loading':
-                            hideLoading();
-                            break;
+                    if (outerContainer) {
+                        const opacity = window.getComputedStyle(outerContainer).opacity;
+                        const containerHeight = bframeIframe.offsetHeight;
+                        newHeight = opacity === "1" ? containerHeight : DEFAULT_HEIGHT;
                     }
                 }
+
+                if (newHeight !== currentHeight) {
+                    currentHeight = newHeight;
+                    sendMessage('height-update', { height: newHeight });
+                    console.log('Height updated:', newHeight);
+                }
             } catch (error) {
-                console.error('Error handling message from parent:', error);
+                console.error('Error updating height:', error);
             }
-        });
+        }
+        function setupHeightObserver() {
+            const mutationConfig = {
+                attributes: true,
+                childList: true,
+                subtree: true,
+                attributeFilter: ['style', 'class']
+            };
 
-        // Add event listeners for height updates
-        window.addEventListener('load', updateHeight);
-        window.addEventListener('resize', updateHeight);
+            const mutationObserver = new MutationObserver(debouncedUpdateHeight);
+            const resizeObserver = new ResizeObserver(debouncedUpdateHeight);
 
-        // Create MutationObserver to watch for DOM changes
-        const observer = new MutationObserver(updateHeight);
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true
-        });
+            // Start observers
+            mutationObserver.observe(document.body, mutationConfig);
 
-        // Initial setup
-        document.addEventListener('DOMContentLoaded', function () {
-            // Check if we should start in dialog mode
-            const dialogMode = urlParams.get('dialog') === 'true';
-            if (dialogMode) {
-                setDialogMode(true);
+            const recaptchaContainer = document.getElementById('recaptcha-container');
+            if (recaptchaContainer) {
+                resizeObserver.observe(recaptchaContainer);
             }
 
-            // Show loading initially
-            showLoading();
-        });
+            // Initial height update
+            updateHeight();
+        }
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        const debouncedUpdateHeight = debounce(updateHeight, 250);
+
     </script>
 </body>
 

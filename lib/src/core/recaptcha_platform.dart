@@ -11,7 +11,6 @@ abstract class RecaptchaPlatform {
   final double initialHeight;
   final double maxHeight;
   final double? width;
-  final Function(bool) onChallengeVisible;
 
   RecaptchaPlatform({
     required this.siteKey,
@@ -23,7 +22,6 @@ abstract class RecaptchaPlatform {
     this.initialHeight = 150,
     this.maxHeight = 500,
     this.width,
-    required this.onChallengeVisible,
   });
 
   Widget build(BuildContext context);

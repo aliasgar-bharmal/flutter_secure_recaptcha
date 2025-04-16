@@ -59,34 +59,44 @@ class RecaptchaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateHeight(double height) {
+    _state = _state.copyWith(height: height);
+    notifyListeners();
+  }
+
   /// Resets the reCAPTCHA state.
   void reset() {
-    _state = _state.copyWith(
-      isVerified: false,
-      clearError: true,
-      isLoading: false,
-      isChallengeVisible: false,
-    );
-    notifyListeners();
-  }
-
-  /// Shows the reCAPTCHA.
-  ///
-  /// This method is primarily used for programmatically showing the reCAPTCHA
-  /// when it's embedded in a dialog or other container that can be hidden.
-  void show() {
-    // This is a placeholder for platform-specific implementations
-    // The actual implementation will be handled by the platform-specific code
-    notifyListeners();
-  }
-
-  /// Hides the reCAPTCHA.
-  ///
-  /// This method is primarily used for programmatically hiding the reCAPTCHA
-  /// when it's embedded in a dialog or other container that can be hidden.
-  void hide() {
-    // This is a placeholder for platform-specific implementations
-    // The actual implementation will be handled by the platform-specific code
+    _state = const RecaptchaState();
     notifyListeners();
   }
 }
+
+
+
+// class RecaptchaController extends ChangeNotifier {
+//   RecaptchaState _state = RecaptchaState();
+
+//   RecaptchaState get state => _state;
+
+//   void setLoading(bool isLoading) {
+//     _state = _state.copyWith(isLoading: isLoading);
+//     notifyListeners();
+//   }
+
+//   void setError(String? error) {
+//     _state = _state.copyWith(errorMessage: error);
+//     notifyListeners();
+//   }
+
+//   void setChallengeVisible(bool visible) {
+//     _state = _state.copyWith(isChallengeVisible: visible);
+//     notifyListeners();
+//   }
+
+
+//   void reset() {
+//     _state = ;
+//     notifyListeners();
+//   }
+// }
+

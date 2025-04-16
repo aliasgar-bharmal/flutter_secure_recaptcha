@@ -25,7 +25,6 @@ class RecaptchaFactory {
     double initialHeight = 150,
     double maxHeight = 500,
     double? width,
-    required Function(bool) onChallengeVisible,
   }) {
     return getPlatformImplementation(
       siteKey: siteKey,
@@ -38,7 +37,6 @@ class RecaptchaFactory {
       initialHeight: initialHeight,
       maxHeight: maxHeight,
       width: width,
-      onChallengeVisible: onChallengeVisible,
     );
   }
 }

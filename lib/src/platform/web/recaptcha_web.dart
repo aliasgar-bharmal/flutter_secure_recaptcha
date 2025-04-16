@@ -36,7 +36,6 @@ class RecaptchaWebPlatform extends RecaptchaPlatform {
     super.initialHeight,
     super.maxHeight,
     super.width,
-    required super.onChallengeVisible,
   }) : _viewId = 'recaptcha-${DateTime.now().millisecondsSinceEpoch}' {
     _initializeIframe();
   }
@@ -96,7 +95,7 @@ class RecaptchaWebPlatform extends RecaptchaPlatform {
           case 'challenge-visible':
             final visible = data['visible'] as bool? ?? false;
             controller.setChallengeVisible(visible);
-            onChallengeVisible(visible);
+
             break;
 
           case 'recaptcha-error':
@@ -149,7 +148,6 @@ class RecaptchaWebPlatform extends RecaptchaPlatform {
       }, '*');
 
       controller.reset();
-      onChallengeVisible(false);
     } catch (e) {
       final errorMessage = 'Failed to reset reCAPTCHA: ${e.toString()}';
       controller.setError(errorMessage);
@@ -170,7 +168,6 @@ RecaptchaPlatform getPlatformImplementation({
   required double initialHeight,
   required double maxHeight,
   double? width,
-  required Function(bool) onChallengeVisible,
 }) {
   return RecaptchaWebPlatform(
     siteKey: siteKey,
@@ -183,6 +180,5 @@ RecaptchaPlatform getPlatformImplementation({
     initialHeight: initialHeight,
     maxHeight: maxHeight,
     width: width,
-    onChallengeVisible: onChallengeVisible,
   );
 }

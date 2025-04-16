@@ -11,7 +11,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 class RecaptchaMobilePlatform extends RecaptchaPlatform {
   final RecaptchaController controller;
   late final WebViewController _webViewController;
-  bool _isInitialized = false;
 
   RecaptchaMobilePlatform({
     required super.siteKey,
@@ -19,12 +18,8 @@ class RecaptchaMobilePlatform extends RecaptchaPlatform {
     required super.onVerified,
     super.onError,
     super.theme,
-    super.size,
+    required super.size,
     required this.controller,
-    super.initialHeight,
-    super.maxHeight,
-    super.width,
-    required super.onChallengeVisible,
   }) {
     _initializeWebView();
   }
@@ -33,44 +28,28 @@ class RecaptchaMobilePlatform extends RecaptchaPlatform {
     try {
       _webViewController = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.transparent)
-        ..enableZoom(false) // Disable zooming to prevent scaling issues
+        ..setBackgroundColor(Colors.purple)
+        ..enableZoom(false)
         ..addJavaScriptChannel(
           'RecaptchaFlutter',
           onMessageReceived: _handleJavaScriptMessage,
         )
         ..setNavigationDelegate(
           NavigationDelegate(
-            onWebResourceError: _handleWebViewError,
-            onPageFinished: (String url) {
-              _isInitialized = true;
+            onWebResourceError: (error) =>
+                _notifyError('WebView error: ${error.description}'),
+            onPageFinished: (url) {
+              _injectResizeObserver();
               controller.setLoading(false);
-              _injectViewportMeta(); // Inject viewport meta after page load
             },
-            onPageStarted: (String url) {
-              controller.setLoading(true);
-            },
+            onPageStarted: (_) => controller.setLoading(true),
           ),
         );
 
-      // Load the reCAPTCHA page
       _loadRecaptchaPage();
     } catch (e) {
-      final errorMessage = 'Failed to initialize WebView: ${e.toString()}';
-      controller.setError(errorMessage);
-      onError?.call(errorMessage);
+      _notifyError('Failed to initialize WebView: ${e.toString()}');
     }
-  }
-
-  // Inject viewport meta tag to ensure proper scaling
-  Future<void> _injectViewportMeta() async {
-    const script = '''
-      var meta = document.createElement('meta');
-      meta.name = 'viewport';
-      meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-      document.head.appendChild(meta);
-    ''';
-    await _executeJavaScript(script);
   }
 
   Future<void> _loadRecaptchaPage() async {
@@ -84,10 +63,53 @@ class RecaptchaMobilePlatform extends RecaptchaPlatform {
       log('[reCAPTCHA] Loading URL: $recaptchaUrl');
       await _webViewController.loadRequest(recaptchaUrl);
     } catch (e) {
-      final errorMessage = 'Failed to load reCAPTCHA page: ${e.toString()}';
-      controller.setError(errorMessage);
-      onError?.call(errorMessage);
+      _notifyError('Failed to load reCAPTCHA page: ${e.toString()}');
     }
+  }
+
+  // Add this method to inject a resize observer
+  void _injectResizeObserver() {
+    const js = '''
+    const captchaContainer = document.querySelector('.g-recaptcha');
+    if (captchaContainer) {
+      const resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+          const height = entry.contentRect.height;
+          if (height > 0) {
+            window.RecaptchaFlutter.postMessage(JSON.stringify({
+              type: 'height-update',
+              height: height + 20 // Add padding
+            }));
+          }
+        }
+      });
+      
+      resizeObserver.observe(captchaContainer);
+      
+      // Also observe the iframe when it appears
+      const checkForIframe = setInterval(() => {
+        const iframe = document.querySelector('iframe[title="reCAPTCHA"]');
+        if (iframe) {
+          resizeObserver.observe(iframe);
+          clearInterval(checkForIframe);
+        }
+      }, 100);
+    }
+    ''';
+
+    _webViewController.runJavaScript(js);
+  }
+
+  void _updateHeight(double newHeight) {
+    log('[reCAPTCHA] Updating height to: $newHeight');
+    // Validate height constraints
+    final validHeight = newHeight.clamp(100.0, maxHeight);
+
+    // Update controller with new height and notify listeners
+    controller.updateHeight(validHeight);
+    _webViewController.runJavaScript(
+        'document.documentElement.style.height = "${validHeight}px";');
+    log('[reCAPTCHA] Height updated to: $validHeight');
   }
 
   void _handleJavaScriptMessage(JavaScriptMessage message) {
@@ -99,6 +121,14 @@ class RecaptchaMobilePlatform extends RecaptchaPlatform {
         final Map<String, dynamic> jsonData = json.decode(data);
 
         switch (jsonData['type']) {
+          case 'height-update':
+            log(jsonData.toString());
+            final height = jsonData['height'] as num?;
+            if (height != null) {
+              _updateHeight(height.toDouble());
+            }
+            break;
+
           case 'recaptcha-token':
             final token = jsonData['recaptchaToken'] as String?;
             if (token != null && token.isNotEmpty) {
@@ -108,25 +138,11 @@ class RecaptchaMobilePlatform extends RecaptchaPlatform {
             }
             break;
 
-          case 'challenge-visible':
-            final visible = jsonData['visible'] as bool? ?? false;
-            log('[reCAPTCHA] Challenge visible: $visible');
-            onChallengeVisible(visible);
-            // Ensure proper layout when challenge appears
-            if (visible) {
-              _ensureChallengeLayout();
-            }
-            break;
-
           case 'recaptcha-error':
             final error = jsonData['error'] as String?;
             if (error != null) {
               _notifyError(error);
             }
-            break;
-
-          case 'recaptcha-loaded':
-            controller.setLoading(false);
             break;
         }
       }
@@ -135,96 +151,51 @@ class RecaptchaMobilePlatform extends RecaptchaPlatform {
     }
   }
 
-  // Ensure proper layout for challenge iframe
-  Future<void> _ensureChallengeLayout() async {
-    const script = '''
-      const challengeIframe = document.querySelector('iframe[title*="recaptcha challenge"]');
-      if (challengeIframe) {
-        const parentDiv = challengeIframe.closest('div[style*="position: fixed"]');
-        if (parentDiv) {
-          parentDiv.style.position = 'fixed';
-          parentDiv.style.width = '100%';
-          parentDiv.style.height = '100%';
-          parentDiv.style.top = '0';
-          parentDiv.style.left = '0';
-          parentDiv.style.zIndex = '2147483647';
-          parentDiv.style.backgroundColor = 'rgba(0,0,0,0.05)';
-
-          challengeIframe.style.position = 'absolute';
-          challengeIframe.style.top = '50%';
-          challengeIframe.style.left = '50%';
-          challengeIframe.style.transform = 'translate(-50%, -50%)';
-          challengeIframe.style.maxWidth = '95vw';
-          challengeIframe.style.maxHeight = '95vh';
-        }
-      }
-    ''';
-    await _executeJavaScript(script);
-  }
-
-  void _handleWebViewError(WebResourceError error) {
-    _notifyError('WebView error: ${error.description}');
-  }
-
   void _notifyError(String message) {
     log('[reCAPTCHA] Error: $message');
     controller.setError(message);
     onError?.call(message);
   }
 
-  Future<void> _executeJavaScript(String script) async {
-    try {
-      if (_isInitialized) {
-        await _webViewController.runJavaScript(script);
-      }
-    } catch (e) {
-      _notifyError('JavaScript execution error: ${e.toString()}');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // WebView with proper constraints
-        SizedBox(
-          width: width ?? double.infinity,
-          height: controller.state.isChallengeVisible ? maxHeight : initialHeight,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: WebViewWidget(
-              controller: _webViewController,
-            ),
-          ),
-        ),
-
-        // Loading indicator
-        if (controller.state.isLoading)
-          const Positioned.fill(
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            return SizedBox(
+              width: width ?? constraints.maxWidth,
+              height: controller.state.height,
+              // Use calculated height
+              child: Stack(
+                children: [
+                  // Replace Expanded with Positioned.fill
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.blueAccent,
+                      child: WebViewWidget(
+                        controller: _webViewController,
+                      ),
+                    ),
+                  ),
+                  if (controller.state.isLoading)
+                    const Positioned.fill(
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
   @override
-  Future<void> reset() async {
-    await _executeJavaScript('''
-      try {
-        resetCaptcha();
-      } catch(e) {
-        RecaptchaFlutter.postMessage(JSON.stringify({
-          type: 'recaptcha-error',
-          error: 'Reset failed: ' + e.message
-        }));
-      }
-    ''');
-
-    controller.reset();
-    onChallengeVisible(false);
-  }
+  Future<void> reset() async {}
 }
 
 RecaptchaPlatform getPlatformImplementation({
@@ -238,7 +209,6 @@ RecaptchaPlatform getPlatformImplementation({
   required double initialHeight,
   required double maxHeight,
   double? width,
-  required Function(bool) onChallengeVisible,
 }) {
   return RecaptchaMobilePlatform(
     siteKey: siteKey,
@@ -248,9 +218,5 @@ RecaptchaPlatform getPlatformImplementation({
     theme: theme,
     size: size,
     controller: controller,
-    initialHeight: initialHeight,
-    maxHeight: maxHeight,
-    width: width,
-    onChallengeVisible: onChallengeVisible,
   );
 }
